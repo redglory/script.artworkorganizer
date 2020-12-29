@@ -115,6 +115,28 @@ def get_sources():
     return sources
 
 
+def get_all_sources():
+    source_types = [ "video",
+                     "music",
+                     "pictures",
+                     "files",
+                     "programs"]
+    sources = []
+    for source_type in source_types:
+        query = {
+            "jsonrpc": "2.0",
+            "method": "Files.GetSources",
+            "params": {"media": "{}".format(source_type)},
+            "id": 1
+        }
+        response = jsonrpc(query)
+        for item in response['result'].get('sources', []):
+            paths = _unstack_multipath(item['file'])
+            for path in paths:
+                sources.append(Source(item['label'], _normalize_path(path)))
+    return sources
+
+
 def _identify_source_content():
     movie_content = get_movies()
     tv_content = get_tvshows() + get_episodes()

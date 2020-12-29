@@ -1,3 +1,7 @@
+v6.1.1
+- added validation to not allow destination path to be any media source in sources.xml
+- fixed some backslash validations for media file paths (windows)
+
 v6.1.0
 - refactor to be python 3 compliant
 

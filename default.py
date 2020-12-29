@@ -4,6 +4,11 @@ import json
 import lib.library as video_library
 from collections import namedtuple
 
+try:  # Kodi v19 or newer
+    from xbmcvfs import translatePath
+except ImportError:  # Kodi v18 and older
+    from xbmc import translatePath
+
 ADDON = xbmcaddon.Addon()
 ADDONID = ADDON.getAddonInfo('id')
 ADDONNAME = ADDON.getAddonInfo('name')
@@ -24,18 +29,21 @@ class Main:
     def __init__ ( self ):
         self._load_settings()
         self._init_variables()
-        self._delete_directories()
         # make sure that "sources.xml" is already set
         if xbmcvfs.exists("special://masterprofile/sources.xml"):
-            # get media sources if setting is defined
-            if  self.split_media_sources == "true" and (self.split_movies_sources == "true" or self.split_tvshows_sources == "true"):
-                self._get_media_sources_and_content()
-            self._create_directories()
-            if self.directoriescreated == 'true':
-                self._copy_artwork()
+            # only delete if it is safe!
+            if not self._directory_in_sources():
+                self._delete_directories()
+                # get media sources if setting is defined
+                if  self.split_media_sources == "true" and (self.split_movies_sources == "true" or self.split_tvshows_sources == "true"):
+                    self._get_media_sources_and_content()
+                self._create_directories()
+                if self.directoriescreated == 'true':
+                    self._copy_artwork()
+            else:
+                log("WARNING! The specified destination directory is defined as a media source. Please choose a different path!", level=xbmc.LOGINFO)
         else:
             log("You MUST set your media sources BEFORE running this addon.", level=xbmc.LOGINFO)
-
 
     def _load_settings( self ):
         self.moviefanart = ADDON.getSetting( "moviefanart" )
@@ -83,7 +91,7 @@ class Main:
         self.directoriescreated = 'true'
         self.dialog = xbmcgui.DialogProgress()
         if self.directory == '':
-            self.directory = xbmcvfs.translatePath(xbmcaddon.Addon().getAddonInfo('profile'))
+            self.directory = translatePath(xbmcaddon.Addon().getAddonInfo('profile'))
         if self.path != '':
             path = os.path.split( os.path.dirname( self.path ) )[1]
             self.directory = os.path.join( self.directory, path )
@@ -124,6 +132,13 @@ class Main:
         if self.albumthumbs == 'true':
             self.albumthumbspath = os.path.join( self.directory, self.albumthumbsdir )
             self.artworklist.append( self.albumthumbspath )
+
+    def _directory_in_sources( self ):
+        all_sources = video_library.get_all_sources()
+        for source in [s.path for s in all_sources]:
+            if video_library._normalize_path(self.directory) in source:
+                return True
+        return False
 
     def _delete_directories( self ):
         if xbmcvfs.exists( self.directory ):
@@ -258,14 +273,14 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 # test file path with movie_content to find source name
                 moviefanartpath = self.moviefanartpath
-                if self.split_movies_sources == "true" and item['file'] in self.movies_content:
-                    media_source = self.movies_content[item['file']]
+                if self.split_movies_sources == "true" and video_library._normalize_path(item['file']) in self.movies_content:
+                    media_source = self.movies_content[video_library._normalize_path(item['file'])]
                     if self.normalize_names == "true":
                         media_source = video_library._normalize_string(media_source)
                     moviefanartpath = os.path.join( self.moviefanartpath, media_source )
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( moviefanartpath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( moviefanartpath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy moviefanart' )
@@ -294,14 +309,14 @@ class Main:
                 tvshowfanartpath = self.tvshowfanartpath
                 if self.split_tvshows_sources == "true":
                     for tv_file_path, source_name in self.tvshows_content.items():
-                        if tv_file_path.startswith(item['file']):
+                        if tv_file_path.startswith(video_library._normalize_path(item['file'])):
                             if self.normalize_names == "true":
                                 source_name = video_library._normalize_string(source_name)
                             tvshowfanartpath = os.path.join( self.tvshowfanartpath, source_name )
                             break
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( tvshowfanartpath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( tvshowfanartpath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy tvshowfanart' )
@@ -332,7 +347,7 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( self.musicvideofanartpath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( self.musicvideofanartpath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy musicvideofanart' )
@@ -359,7 +374,7 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( self.artistfanartpath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( self.artistfanartpath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy artistfanart' )
@@ -387,14 +402,14 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 # test file path with movie_content to find source name
                 moviethumbspath = self.moviethumbspath
-                if self.split_movies_sources == "true" and item['file'] in self.movies_content:
-                    media_source = self.movies_content[item['file']]
+                if self.split_movies_sources == "true" and video_library._normalize_path(item['file']) in self.movies_content:
+                    media_source = self.movies_content[video_library._normalize_path(item['file'])]
                     if self.normalize_names == "true":
                         media_source = video_library._normalize_string(media_source)
                     moviethumbspath = os.path.join( self.moviethumbspath, media_source )
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( moviethumbspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( moviethumbspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy moviethumb' )
@@ -423,14 +438,14 @@ class Main:
                 tvshowbannerspath = self.tvshowbannerspath
                 if self.split_tvshows_sources == "true":
                     for tv_file_path, source_name in self.tvshows_content.items():
-                        if tv_file_path.startswith(item['file']):
+                        if tv_file_path.startswith(video_library._normalize_path(item['file'])):
                             if self.normalize_names == "true":
                                 source_name = video_library._normalize_string(source_name)
                             tvshowbannerspath = os.path.join( self.tvshowbannerspath, source_name )
                             break
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( tvshowbannerspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( tvshowbannerspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy tvshowbanner' )
@@ -459,14 +474,14 @@ class Main:
                 tvshowposterspath = self.tvshowposterspath
                 if self.split_tvshows_sources == "true":
                     for tv_file_path, source_name in self.tvshows_content.items():
-                        if tv_file_path.startswith(item['file']):
+                        if tv_file_path.startswith(video_library._normalize_path(item['file'])):
                             if self.normalize_names == "true":
                                 source_name = video_library._normalize_string(source_name)
                             tvshowposterspath = os.path.join( self.tvshowposterspath, source_name )
                             break
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( tvshowposterspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( tvshowposterspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy tvshowposter' )
@@ -508,14 +523,14 @@ class Main:
                         seasonthumbspath = self.seasonthumbspath
                         if self.split_tvshows_sources == "true":
                             for tv_file_path, source_name in self.tvshows_content.items():
-                                if tv_file_path.startswith(tvshow.path):
+                                if tv_file_path.startswith(video_library._normalize_path(tvshow.path)):
                                     if self.normalize_names == "true":
                                         source_name = video_library._normalize_string(source_name)
                                     seasonthumbspath = os.path.join( self.seasonthumbspath, source_name )
                                     break
                         if artwork != '':
                             try:
-                                xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( seasonthumbspath, filename ) )
+                                xbmcvfs.copy( translatePath( artwork ), os.path.join( seasonthumbspath, filename ) )
                                 count += 1
                             except:
                                 log( 'failed to copy seasonthumb' )
@@ -546,14 +561,14 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 # test file path with tv_content to find source name
                 episodethumbspath = self.episodethumbspath
-                if self.split_tvshows_sources == "true" and item['file'] in self.tvshows_content:
-                    source_name = self.tvshows_content[item['file']]
+                if self.split_tvshows_sources == "true" and video_library._normalize_path(item['file']) in self.tvshows_content:
+                    source_name = self.tvshows_content[video_library._normalize_path(item['file'])]
                     if self.normalize_names == "true":
                         source_name = video_library._normalize_string(source_name)
                     episodethumbspath = os.path.join( self.episodethumbspath, source_name)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( episodethumbspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( episodethumbspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy episodethumb' )
@@ -584,7 +599,7 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( self.musicvideothumbspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( self.musicvideothumbspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy musicvideothumb' )
@@ -611,7 +626,7 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( self.artistthumbspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( self.artistthumbspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy artistthumb' )
@@ -639,7 +654,7 @@ class Main:
                     filename = video_library._normalize_string(filename)
                 if artwork != '':
                     try:
-                        xbmcvfs.copy( xbmcvfs.translatePath( artwork ), os.path.join( self.albumthumbspath, filename ) )
+                        xbmcvfs.copy( translatePath( artwork ), os.path.join( self.albumthumbspath, filename ) )
                         count += 1
                     except:
                         log( 'failed to copy albumthumb' )
